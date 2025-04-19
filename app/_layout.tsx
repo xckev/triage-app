@@ -34,7 +34,7 @@ function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="home"
+        name="index"
         options={{
           title: "Dashboard",
           headerShown: false,
@@ -44,11 +44,12 @@ function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="index"
+        name="chat"
         options={{
           title: "Triage Assistant",
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
-            <MaterialCommunityIcons name="chat" size={size} color={color} />
+            <MaterialCommunityIcons name="robot" size={size} color={color} />
           ),
         }}
       />

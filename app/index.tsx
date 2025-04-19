@@ -1,137 +1,195 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
   ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  TextInput,
+  Image,
+  RefreshControl,
 } from "react-native";
-import { Button, Text, Surface, useTheme } from "react-native-paper";
-import { generateResponse } from '../services/aiService';
+import { Text, Surface, useTheme } from "react-native-paper";
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import { getStoredEnvironmentalData, fetchAndStoreEnvironmentalData } from '../services/environmentalService';
 
-interface Message {
-  text: string;
-  isUser: boolean;
-}
-
-export default function ChatScreen() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const scrollViewRef = useRef<ScrollView>(null);
+const Widget = ({ title, value, subtitle, icon, style, valueStyle }: { 
+  title: string; 
+  value: string; 
+  subtitle: string;
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  style?: any;
+  valueStyle?: any;
+}) => {
   const theme = useTheme();
+  return (
+    <Surface style={[styles.widget, style, { backgroundColor: theme.colors.surfaceVariant }]}>
+      <View style={styles.widgetHeader}>
+        <Text style={[styles.widgetTitle, { color: theme.colors.onSurface }]}>{title}</Text>
+        {icon && <MaterialCommunityIcons name={icon} size={24} color={theme.colors.onSurfaceVariant} />}
+      </View>
+      <Text style={[styles.widgetValue, valueStyle, { color: theme.colors.primary }]}>{value}</Text>
+      <Text style={[styles.widgetSubtitle, { color: theme.colors.onSurfaceVariant }]}>{subtitle}</Text>
+    </Surface>
+  );
+};
 
-  useEffect(() => {
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollToEnd({ animated: true });
-    }
-  }, [messages]);
+export default function DashboardScreen() {
+  const theme = useTheme();
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [environmentalData, setEnvironmentalData] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const handleSend = async () => {
-    if (inputText.trim() === "") return;
-
-    const userMessage: Message = { text: inputText, isUser: true };
-    setMessages((prev) => [...prev, userMessage]);
-    setInputText("");
-    setIsLoading(true);
-
+  const loadData = async () => {
     try {
-      const response = await generateResponse(inputText);
-      const aiMessage: Message = {
-        text: response,
-        isUser: false,
-      };
-      setMessages((prev) => [...prev, aiMessage]);
+      console.log('Loading initial data...');
+      // Check location permissions
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setErrorMsg('Permission to access location was denied');
+        return;
+      }
+
+      // Get location
+      let currentLocation = await Location.getCurrentPositionAsync({});
+      setLocation(currentLocation);
+
+      // First try to get stored data
+      const storedData = await getStoredEnvironmentalData();
+      if (storedData) {
+        console.log('Using stored data initially');
+        setEnvironmentalData(storedData);
+      }
+
+      // Then fetch fresh data with current location
+      console.log('Fetching fresh data with location:', currentLocation.coords);
+      await fetchAndStoreEnvironmentalData(
+        currentLocation.coords.latitude,
+        currentLocation.coords.longitude
+      );
+      const freshData = await getStoredEnvironmentalData();
+      setEnvironmentalData(freshData);
     } catch (error) {
-      console.error('Error generating response:', error);
-      const errorMessage: Message = {
-        text: "Sorry, I encountered an error. Please try again.",
-        isUser: false,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
+      console.error('Error in initialization:', error);
+      setErrorMsg('Error fetching environmental data');
     }
   };
 
-  const renderMessage = (message: Message, index: number) => {
-    return (
-      <Surface
-        key={index}
-        style={[
-          styles.messageBubble,
-          message.isUser ? styles.userBubble : styles.aiBubble,
-          message.isUser 
-            ? { backgroundColor: theme.colors.primary } 
-            : { backgroundColor: theme.colors.surfaceVariant }
-        ]}
-      >
-        <Text 
-          style={[
-            styles.messageText,
-            message.isUser 
-              ? { color: theme.colors.onPrimary }
-              : { color: theme.colors.onSurface }
-          ]}
-        >
-          {message.text}
-        </Text>
-      </Surface>
-    );
+  const onRefresh = useCallback(async () => {
+    if (!location) {
+      console.error('Cannot refresh: location not available');
+      setErrorMsg('Location not available for refresh');
+      return;
+    }
+
+    console.log('Refreshing data with location:', location.coords);
+    setRefreshing(true);
+    try {
+      // Fetch new data from API with current location
+      await fetchAndStoreEnvironmentalData(
+        location.coords.latitude,
+        location.coords.longitude
+      );
+      // Reload the stored data
+      const data = await getStoredEnvironmentalData();
+      setEnvironmentalData(data);
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      setErrorMsg('Error refreshing environmental data');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [location]);
+
+  useEffect(() => {
+    console.log('Dashboard mounted, loading data...');
+    loadData();
+  }, []);
+
+  const formatCoordinates = (coords: Location.LocationObject | null) => {
+    if (!coords) return 'Loading...';
+    return `${coords.coords.latitude.toFixed(4)}, ${coords.coords.longitude.toFixed(4)}`;
+  };
+
+  const formatTemperature = (data: any): string => {
+    const temp = data?.weather?.temperature_celsius;
+    if (temp === null || temp === undefined) return '--°C';
+    return `${Math.round(temp)}°C`;
+  };
+
+  const getWeatherConditions = (data: any): string => {
+    if (!data?.weather?.conditions?.length) return 'Unknown';
+    return data.weather.conditions.join(', ');
+  };
+
+  const getAQIStatus = (data: any): string => {
+    if (data?.air_quality?.aqi === null) return 'Unknown';
+    return `${data.air_quality.aqi} (${data.air_quality.category || 'Unknown'})`;
+  };
+
+  const getFloodRiskStatus = (data: any): string => {
+    if (!data?.flood_risk) return 'Unknown';
+    return `${data.flood_risk.current_level} (${data.flood_risk.trend})`;
   };
 
   return (
-    <KeyboardAvoidingView
+    <ScrollView 
       style={[styles.container, { backgroundColor: theme.colors.background }]}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
-    >
-      <ScrollView
-        ref={scrollViewRef}
-        style={styles.messagesContainer}
-        contentContainerStyle={styles.messagesContent}
-      >
-        {messages.length === 0 ? (
-          <View style={styles.welcomeContainer}>
-            <Text style={[styles.welcomeText, { color: theme.colors.primary }]}>
-              Welcome to AI Chatbot!
-            </Text>
-            <Text style={[styles.welcomeSubtext, { color: theme.colors.onSurfaceVariant }]}>
-              Start a conversation by typing a message below.
-            </Text>
-          </View>
-        ) : (
-          messages.map((message, index) => renderMessage(message, index))
-        )}
-      </ScrollView>
-      <View style={[styles.inputContainer, { 
-        backgroundColor: theme.colors.surface,
-        borderTopColor: theme.colors.surfaceVariant 
-      }]}>
-        <TextInput
-          style={[styles.input, { 
-            color: theme.colors.onSurface,
-            backgroundColor: theme.colors.surface,
-          }]}
-          value={inputText}
-          onChangeText={setInputText}
-          placeholder="Type your message..."
-          placeholderTextColor={theme.colors.onSurfaceVariant}
-          editable={!isLoading}
-          multiline
-          maxLength={500}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={theme.colors.primary}
         />
-        <Button
-          mode="contained"
-          onPress={handleSend}
-          style={styles.sendButton}
-          disabled={isLoading}
-        >
-          {isLoading ? "..." : "Send"}
-        </Button>
+      }
+    >
+      <View style={styles.header}>
+        <Text variant="headlineLarge" style={[styles.title, { color: theme.colors.onBackground }]}>
+          Dashboard
+        </Text>
+        <Image 
+          source={require('../assets/images/TriageLogo.png')}
+          style={styles.logo}
+        />
       </View>
-    </KeyboardAvoidingView>
+
+      <View style={styles.summaryContainer}>
+        <Widget
+          title="Power Grid"
+          value={environmentalData?.power_outage === false ? "All systems normal" : "Power outage detected"}
+          subtitle={`Last updated ${environmentalData?.timestamp ? new Date(environmentalData.timestamp).toLocaleString() : 'Loading...'}`}
+          icon="check-circle"
+          style={styles.summaryWidget}
+        />
+      </View>
+
+      <View style={styles.gridContainer}>
+        <Widget
+          title="Air Quality"
+          value={environmentalData ? getAQIStatus(environmentalData) : 'Loading...'}
+          subtitle="Current AQI Status"
+          icon="air-filter"
+        />
+        <Widget
+          title="Weather"
+          value={environmentalData ? formatTemperature(environmentalData) : 'Loading...'}
+          subtitle={environmentalData ? getWeatherConditions(environmentalData) : 'Loading...'}
+          icon="weather-partly-cloudy"
+        />
+        <Widget
+          title="Flood Risk"
+          value={environmentalData ? getFloodRiskStatus(environmentalData) : 'Loading...'}
+          subtitle={`${environmentalData?.flood_risk?.distance_km?.toFixed(1) || '--'} km from station`}
+          icon="water"
+        />
+        <Widget
+          title="Location"
+          value={formatCoordinates(location)}
+          subtitle={errorMsg || "Current coordinates"}
+          icon="map-marker"
+          valueStyle={styles.locationValue}
+        />
+      </View>
+    </ScrollView>
   );
 }
 
@@ -139,59 +197,61 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  messagesContainer: {
-    flex: 1,
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 24,
+    paddingTop: 60,
   },
-  messagesContent: {
+  title: {
+    fontWeight: 'bold',
+  },
+  summaryContainer: {
+    paddingTop: 0,
+    padding: 10,
+  },
+  gridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: 8,
+    gap: 20,
+  },
+  widget: {
     padding: 16,
-    flexGrow: 1,
+    borderRadius: 16,
+    elevation: 1,
+    width: '47%',
+    aspectRatio: 1,
   },
-  welcomeContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
+  summaryWidget: {
+    width: '100%',
+    aspectRatio: 2,
   },
-  welcomeText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 10,
-    textAlign: "center",
+  widgetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  welcomeSubtext: {
+  widgetTitle: {
     fontSize: 16,
-    textAlign: "center",
+    fontWeight: '500',
   },
-  messageBubble: {
-    padding: 12,
-    marginVertical: 4,
-    borderRadius: 20,
-    maxWidth: "80%",
+  widgetValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    marginBottom: 8,
   },
-  userBubble: {
-    alignSelf: "flex-end",
+  locationValue: {
+    fontSize: 20,
   },
-  aiBubble: {
-    alignSelf: "flex-start",
+  widgetSubtitle: {
+    fontSize: 14,
   },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    padding: 16,
-    borderTopWidth: 1,
-  },
-  input: {
-    flex: 1,
-    marginRight: 8,
-    maxHeight: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  sendButton: {
-    justifyContent: "center",
+  logo: {
+    width: 60,
+    height: 60,
+    borderRadius: 40,
   },
 });
