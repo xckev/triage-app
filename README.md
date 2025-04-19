@@ -1,6 +1,6 @@
 # Triage Mobile App
 
-A disaster relief and prevention mobile application built with Expo and React Native. This app helps individuals and communities prepare for, respond to, and recover from natural disasters. It provides real-time information, AI-powered assistance, and works seamlessly both online and offline.
+A disaster relief and prevention mobile application built with the Meta LlaMA Stack, Expo, and React Native. This app helps individuals and communities prepare for, respond to, and recover from natural disasters. It provides real-time information, AI-powered assistance, and works seamlessly both online and offline.
 
 ## Key Features
 
