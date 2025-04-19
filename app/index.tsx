@@ -7,7 +7,8 @@ import {
   Platform,
   TextInput,
 } from "react-native";
-import { Button, Text, Surface } from "react-native-paper";
+import { Button, Text, Surface, useTheme } from "react-native-paper";
+import { generateResponse } from '../services/aiService';
 
 interface Message {
   text: string;
@@ -19,6 +20,7 @@ export default function ChatScreen() {
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     if (scrollViewRef.current) {
@@ -35,14 +37,14 @@ export default function ChatScreen() {
     setIsLoading(true);
 
     try {
-      // TODO: Implement actual AI service call
-      // For now, just echo the message
-      const botMessage: Message = {
-        text: `Echo: ${inputText}`,
+      const response = await generateResponse(inputText);
+      const aiMessage: Message = {
+        text: response,
         isUser: false,
       };
-      setMessages((prev) => [...prev, botMessage]);
+      setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
+      console.error('Error generating response:', error);
       const errorMessage: Message = {
         text: "Sorry, I encountered an error. Please try again.",
         isUser: false,
@@ -53,9 +55,35 @@ export default function ChatScreen() {
     }
   };
 
+  const renderMessage = (message: Message, index: number) => {
+    return (
+      <Surface
+        key={index}
+        style={[
+          styles.messageBubble,
+          message.isUser ? styles.userBubble : styles.aiBubble,
+          message.isUser 
+            ? { backgroundColor: theme.colors.primary } 
+            : { backgroundColor: theme.colors.surfaceVariant }
+        ]}
+      >
+        <Text 
+          style={[
+            styles.messageText,
+            message.isUser 
+              ? { color: theme.colors.onPrimary }
+              : { color: theme.colors.onSurface }
+          ]}
+        >
+          {message.text}
+        </Text>
+      </Surface>
+    );
+  };
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
@@ -66,33 +94,30 @@ export default function ChatScreen() {
       >
         {messages.length === 0 ? (
           <View style={styles.welcomeContainer}>
-            <Text style={styles.welcomeText}>Welcome to AI Chatbot!</Text>
-            <Text style={styles.welcomeSubtext}>
+            <Text style={[styles.welcomeText, { color: theme.colors.primary }]}>
+              Welcome to AI Chatbot!
+            </Text>
+            <Text style={[styles.welcomeSubtext, { color: theme.colors.onSurfaceVariant }]}>
               Start a conversation by typing a message below.
             </Text>
           </View>
         ) : (
-          messages.map((message, index) => (
-            <Surface
-              key={index}
-              style={[
-                styles.messageBubble,
-                message.isUser ? styles.userMessage : styles.botMessage,
-              ]}
-            >
-              <Text style={message.isUser ? styles.userText : styles.botText}>
-                {message.text}
-              </Text>
-            </Surface>
-          ))
+          messages.map((message, index) => renderMessage(message, index))
         )}
       </ScrollView>
-      <View style={styles.inputContainer}>
+      <View style={[styles.inputContainer, { 
+        backgroundColor: theme.colors.surface,
+        borderTopColor: theme.colors.surfaceVariant 
+      }]}>
         <TextInput
-          style={styles.input}
+          style={[styles.input, { 
+            color: theme.colors.onSurface,
+            backgroundColor: theme.colors.surface,
+          }]}
           value={inputText}
           onChangeText={setInputText}
           placeholder="Type your message..."
+          placeholderTextColor={theme.colors.onSurfaceVariant}
           editable={!isLoading}
           multiline
           maxLength={500}
@@ -113,7 +138,6 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
   },
   messagesContainer: {
     flex: 1,
@@ -131,13 +155,11 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#6200ee",
     marginBottom: 10,
     textAlign: "center",
   },
   welcomeSubtext: {
     fontSize: 16,
-    color: "#666",
     textAlign: "center",
   },
   messageBubble: {
@@ -146,31 +168,28 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     maxWidth: "80%",
   },
-  userMessage: {
+  userBubble: {
     alignSelf: "flex-end",
-    backgroundColor: "#6200ee",
   },
-  botMessage: {
+  aiBubble: {
     alignSelf: "flex-start",
-    backgroundColor: "white",
   },
-  userText: {
-    color: "white",
-  },
-  botText: {
-    color: "black",
+  messageText: {
+    fontSize: 16,
+    lineHeight: 20,
   },
   inputContainer: {
     flexDirection: "row",
     padding: 16,
-    backgroundColor: "white",
     borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
   },
   input: {
     flex: 1,
     marginRight: 8,
     maxHeight: 100,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   sendButton: {
     justifyContent: "center",
