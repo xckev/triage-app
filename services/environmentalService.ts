@@ -10,7 +10,7 @@ interface EnvironmentalData {
 }
 
 const STORAGE_KEY = '@environmental_data';
-const API_BASE_URL = 'http://54.149.70.62:8002/weather';
+const API_BASE_URL = 'http://35.92.225.238:8000/weather';
 
 export const fetchAndStoreEnvironmentalData = async (latitude: number, longitude: number): Promise<void> => {
   try {

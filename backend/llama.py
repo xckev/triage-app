@@ -6,7 +6,7 @@ from typing import Optional, List
 app = FastAPI()
 
 # Initialize LlamaStack client and setup
-client = LlamaStackClient(base_url="http://54.149.70.62:8321")
+client = LlamaStackClient(base_url="http://0.0.0.0:8321")
 
 # Select the first LLM model
 models = client.models.list()
@@ -49,4 +49,4 @@ async def analyze_weather(request: WeatherRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="0.0.0.0", port=5000)

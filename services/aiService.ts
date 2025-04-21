@@ -40,7 +40,7 @@ export const generateResponse = async (prompt: string, mode: 'disaster' | 'first
     const environmentalData = await getStoredEnvironmentalData();
     const environmentalContext = await formatEnvironmentalData(environmentalData);
 
-    const response = await fetch('http://54.149.70.62:8001/analyze', {
+    const response = await fetch('http://35.92.225.238:5000/analyze', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
