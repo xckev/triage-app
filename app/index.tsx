@@ -239,7 +239,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   widgetValue: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 8,
   },
